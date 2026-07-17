@@ -4,7 +4,9 @@ const GUESS = {
   name: ["business_name", "name", "contact", "business", "company", "lead"],
   phone: ["phone", "number", "mobile", "cell", "tel"],
   business: ["business", "company", "org", "account"],
-  notes: ["notes", "note", "info", "comment"],
+  vertical: ["vertical", "industry", "trade", "category"],
+  city: ["city", "location", "market"],
+  notes: ["notes", "note", "comments", "pitch_angle", "pitch", "angle"],
   status: ["status", "result", "outcome", "called", "disposition"],
 };
 
@@ -18,10 +20,20 @@ export function guessColumn(headers, key) {
 }
 
 export function defaultMapping(headers) {
+  const name = guessColumn(headers, "name");
+  let business = guessColumn(headers, "business");
+  const vertical = guessColumn(headers, "vertical");
+
+  if (!business || business === name) {
+    business = vertical || business;
+  }
+
   return {
-    name: guessColumn(headers, "name"),
+    name,
     phone: guessColumn(headers, "phone"),
-    business: guessColumn(headers, "business"),
+    business,
+    vertical,
+    city: guessColumn(headers, "city"),
     notes: guessColumn(headers, "notes"),
     status: guessColumn(headers, "status"),
   };

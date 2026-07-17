@@ -45,7 +45,7 @@ import {
 import { writeStatusToSheet } from "./lib/sheetWrite";
 import PasscodeGate from "./components/PasscodeGate";
 
-const EMPTY_MAPPING = { name: "", phone: "", business: "", notes: "", status: "" };
+const EMPTY_MAPPING = { name: "", phone: "", business: "", vertical: "", city: "", notes: "", status: "" };
 const EMPTY_FILTERS = { skipAlreadyCalled: true, onlyEmptyStatus: false };
 
 function Odometer({ value, total }) {
@@ -456,6 +456,8 @@ export default function CallQueue() {
       name: sourceMapping.name ? r[sourceMapping.name] : "",
       phone: sourceMapping.phone ? r[sourceMapping.phone] : "",
       business: sourceMapping.business ? r[sourceMapping.business] : "",
+      vertical: sourceMapping.vertical ? r[sourceMapping.vertical] : "",
+      city: sourceMapping.city ? r[sourceMapping.city] : "",
       notes: sourceMapping.notes ? r[sourceMapping.notes] : "",
       status: sourceMapping.status ? r[sourceMapping.status] : "",
       sheetRow: r._sheetRow,
@@ -893,7 +895,7 @@ export default function CallQueue() {
             {rows.length} rows found. Map columns, then set filters.
           </p>
 
-          {["name", "phone", "business", "status", "notes"].map((key) => (
+          {["name", "phone", "vertical", "city", "status", "notes"].map((key) => (
             <div key={key} className="mb-4">
               <label className="block text-xs uppercase digit-label mb-1.5" style={{ color: theme.textMuted }}>
                 {key}{" "}
@@ -1081,9 +1083,14 @@ export default function CallQueue() {
               </div>
 
               <div>
-                <p className="text-xs uppercase digit-label mb-2" style={{ color: theme.textMuted }}>
-                  {current.business || "Lead"}
+                <p className="text-xs uppercase digit-label mb-1" style={{ color: theme.textMuted }}>
+                  {current.vertical || current.business || "Lead"}
                 </p>
+                {current.city && (
+                  <p className="text-xs mb-2" style={{ color: theme.textDim }}>
+                    {current.city}
+                  </p>
+                )}
                 <h3 className="text-2xl font-semibold leading-tight mb-2">{current.name || "—"}</h3>
                 <a
                   href={toTelHref(current.phone) || "#"}
@@ -1101,6 +1108,9 @@ export default function CallQueue() {
 
               {current.notes && (
                 <p className="text-sm leading-relaxed line-clamp-3" style={{ color: theme.textMuted }}>
+                  <span className="text-xs uppercase digit-label block mb-1" style={{ color: theme.textDim }}>
+                    Pitch
+                  </span>
                   {current.notes}
                 </p>
               )}

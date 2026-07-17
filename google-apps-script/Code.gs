@@ -34,7 +34,7 @@ function doPost(e) {
     }
 
     const sheet = getDataSheet();
-    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var headers = ensureColumns(sheet);
 
     const statusCol = findColumn(headers, ["status"]);
     const calledByCol = findColumn(headers, ["called by", "caller", "called_by"]);
@@ -64,6 +64,27 @@ function doPost(e) {
   } catch (err) {
     return jsonResponse({ ok: false, error: String(err) }, 500);
   }
+}
+
+function ensureColumns(sheet) {
+  var lastCol = Math.max(sheet.getLastColumn(), 1);
+  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
+  var lower = headers.map(function (h) {
+    return String(h || "").toLowerCase().trim();
+  });
+
+  if (!findColumn(headers, ["called by", "caller", "called_by"])) {
+    lastCol++;
+    sheet.getRange(1, lastCol).setValue("Called By");
+  }
+
+  headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (!findColumn(headers, ["notes", "note", "comments"])) {
+    lastCol = sheet.getLastColumn();
+    sheet.getRange(1, lastCol + 1).setValue("Notes");
+  }
+
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 }
 
 function doGet() {
