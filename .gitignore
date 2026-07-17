@@ -8,3 +8,4 @@ dist
 .clasp.json
 .clasprc.json
 .vercel
+.env*

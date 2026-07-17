@@ -17,7 +17,14 @@ import {
   User,
 } from "lucide-react";
 import { theme } from "./lib/theme";
-import { OUTCOMES, OUTCOME_BY_ID, outcomeToneClass, outcomeBadgeClass, CALLED_MARKERS } from "./lib/outcomes";
+import {
+  OUTCOMES,
+  OUTCOME_BY_ID,
+  outcomeToneClass,
+  outcomeBadgeClass,
+  CALLED_MARKERS,
+  UNCALLED_MARKERS,
+} from "./lib/outcomes";
 import { loadSession, saveSession, clearSession, formatSavedAt } from "./lib/storage";
 import {
   parseSheetText,
@@ -138,6 +145,8 @@ function isAlreadyCalled(statusValue) {
 function shouldSkipByStatus(statusValue, team) {
   const value = String(statusValue || "").trim();
   if (!value) return false;
+  const lower = value.toLowerCase();
+  if (UNCALLED_MARKERS.some((m) => lower.includes(m))) return false;
   if (team) return true;
   return isAlreadyCalled(value);
 }

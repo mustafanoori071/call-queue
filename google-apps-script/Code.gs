@@ -15,6 +15,12 @@
  * - Notes (optional) — call note appended if present
  */
 
+const SPREADSHEET_ID = "1-aI70Eu4J-EoGo5MhNFp6VTWxSP8K49cMt4Llntge4A";
+
+function getDataSheet() {
+  return SpreadsheetApp.openById(SPREADSHEET_ID).getSheets()[0];
+}
+
 function doPost(e) {
   try {
     const body = JSON.parse(e.postData.contents);
@@ -27,7 +33,7 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: "row (>=2) and status are required" }, 400);
     }
 
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    const sheet = getDataSheet();
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
     const statusCol = findColumn(headers, ["status"]);

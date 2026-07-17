@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 
 const GUESS = {
-  name: ["name", "contact", "business", "company", "lead"],
+  name: ["business_name", "name", "contact", "business", "company", "lead"],
   phone: ["phone", "number", "mobile", "cell", "tel"],
   business: ["business", "company", "org", "account"],
   notes: ["notes", "note", "info", "comment"],

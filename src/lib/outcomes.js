@@ -10,6 +10,15 @@ export const OUTCOMES = [
 
 export const OUTCOME_BY_ID = Object.fromEntries(OUTCOMES.map((o) => [o.id, o]));
 
+export const UNCALLED_MARKERS = [
+  "not called yet",
+  "not called",
+  "uncalled",
+  "new",
+  "pending",
+  "to call",
+];
+
 export const CALLED_MARKERS = [
   "called",
   "done",
