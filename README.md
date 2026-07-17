@@ -1,28 +1,31 @@
 # Call Queue
 
-Swipeable cold-call queue: load leads from a Google Sheet (paste or live link), see one at a time, tap to dial, swipe to mark called/skipped.
+Swipeable cold-call queue for local service outreach. Load leads from Google Sheets, dial one at a time, log outcomes, take notes, schedule callbacks, and export results.
+
+## Features
+
+- **Paste or live sheet link** — CSV paste (always works) or Google Sheet URL fetch
+- **Column mapping** — auto-detects name, phone, business, status, notes
+- **Queue filters** — skip already-called rows, only empty status
+- **Rich outcomes** — interested, no answer, voicemail, not interested, callback, bad number, skip
+- **Call notes** — jot context after each dial
+- **Callbacks** — schedule date/time, view due and upcoming reminders
+- **Auto-save** — progress persists in `localStorage`; resume where you left off
+- **Session analytics** — contact rate, interest rate, outcome breakdown
+- **CSV export** — download full results with notes and timestamps
+- **PWA** — install via Add to Home Screen (iOS/Android)
 
 ## Quick start
 
 ```bash
-cd call-queue
 npm install
 npm run dev
 ```
 
-Open http://localhost:5173 on your phone (same Wi‑Fi) or desktop.
+## Deploy
 
-## Deploy to Vercel
+Push to GitHub and connect at [vercel.com](https://vercel.com). Build command: `npm run build`, output: `dist`.
 
-1. Push this `call-queue/` folder to a GitHub repo (or use the repo root with Vercel's root directory set to `call-queue`)
-2. Connect at [vercel.com](https://vercel.com) — every push to `main` auto-deploys
-3. On your phone: open the URL → Share → **Add to Home Screen**
+## Theme
 
-## Data input
-
-- **Paste data** — copy your sheet (Cmd/Ctrl+A) and paste. Always works.
-- **Sheet link** — paste a Google Sheet URL with sharing set to "Anyone with the link — Viewer." Works from a deployed domain (not in sandboxed iframes).
-
-## Next steps
-
-See the original handoff notes in the parent README for persistence (`localStorage` or Sheets API) and PWA polish ideas.
+Blue accent on dark navy (`#3B82F6` on `#0B1220`).
