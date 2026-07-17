@@ -10,6 +10,7 @@ export const OUTCOMES = [
 
 export const OUTCOME_BY_ID = Object.fromEntries(OUTCOMES.map((o) => [o.id, o]));
 
+// Only these mean "still in the queue"
 export const UNCALLED_MARKERS = [
   "not called yet",
   "not called",
@@ -19,31 +20,25 @@ export const UNCALLED_MARKERS = [
   "to call",
 ];
 
-export const CALLED_MARKERS = [
+// Legacy sheet values still count as already processed
+export const LEGACY_CALLED_MARKERS = [
+  "booked/website!",
+  "booked/ no show",
+  "closed",
   "called",
   "done",
   "completed",
   "contacted",
-  "booked/website!",
-  "booked/ no show",
-  "closed",
-  "no answer",
   "yes",
 ];
 
-// Must match allowed values in the Google Sheet status dropdown
-const SHEET_STATUS = {
-  interested: "booked/Website!",
-  no_answer: "no answer",
-  voicemail: "no answer",
-  not_interested: "Closed",
-  callback: "no answer",
-  bad_number: "Closed",
-  skipped: "no answer",
-};
+export const CALLED_MARKERS = [
+  ...OUTCOMES.map((o) => o.label.toLowerCase()),
+  ...LEGACY_CALLED_MARKERS,
+];
 
 export function outcomeToSheetStatus(result) {
-  return SHEET_STATUS[result] || result;
+  return OUTCOME_BY_ID[result]?.label || result;
 }
 
 export function outcomeToneClass(tone) {

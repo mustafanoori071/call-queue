@@ -44,6 +44,8 @@ function doPost(e) {
       return jsonResponse({ ok: false, error: "Status column not found in row 1" }, 400);
     }
 
+    ensureStatusValidation(sheet, statusCol);
+
     sheet.getRange(row, statusCol).setValue(status);
 
     if (calledBy && calledByCol) {
@@ -85,6 +87,27 @@ function ensureColumns(sheet) {
   }
 
   return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+}
+
+function ensureStatusValidation(sheet, statusCol) {
+  var values = [
+    "not called yet",
+    "Interested",
+    "No answer",
+    "Voicemail",
+    "Not interested",
+    "Call back",
+    "Bad number",
+    "Skip",
+    // legacy values still on older rows
+    "booked/Website!",
+    "booked/ NO SHOW",
+    "Closed",
+  ];
+
+  var rule = SpreadsheetApp.newDataValidation().requireValueInList(values, true).build();
+  var numRows = Math.max(sheet.getLastRow() - 1, 500);
+  sheet.getRange(2, statusCol, numRows, 1).setDataValidation(rule);
 }
 
 function doGet() {
