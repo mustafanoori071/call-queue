@@ -10,7 +10,34 @@ export const OUTCOMES = [
 
 export const OUTCOME_BY_ID = Object.fromEntries(OUTCOMES.map((o) => [o.id, o]));
 
-export const CALLED_MARKERS = ["called", "done", "completed", "contacted", "yes"];
+export const CALLED_MARKERS = [
+  "called",
+  "done",
+  "completed",
+  "contacted",
+  "interested",
+  "not interested",
+  "no answer",
+  "voicemail",
+  "callback",
+  "bad number",
+  "skipped",
+  "yes",
+];
+
+const SHEET_STATUS = {
+  interested: "interested",
+  no_answer: "no answer",
+  voicemail: "voicemail",
+  not_interested: "not interested",
+  callback: "callback",
+  bad_number: "bad number",
+  skipped: "skipped",
+};
+
+export function outcomeToSheetStatus(result) {
+  return SHEET_STATUS[result] || result;
+}
 
 export function outcomeToneClass(tone) {
   switch (tone) {

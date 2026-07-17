@@ -2,7 +2,6 @@ import React, { useState, useRef, useEffect, useMemo, useCallback } from "react"
 import {
   Phone,
   Search,
-  X,
   Check,
   RotateCcw,
   Link2,
@@ -14,12 +13,30 @@ import {
   Clock,
   BarChart3,
   Filter,
+  RefreshCw,
+  User,
 } from "lucide-react";
 import { theme } from "./lib/theme";
 import { OUTCOMES, OUTCOME_BY_ID, outcomeToneClass, outcomeBadgeClass, CALLED_MARKERS } from "./lib/outcomes";
 import { loadSession, saveSession, clearSession, formatSavedAt } from "./lib/storage";
-import { parseSheetText, fetchSheetText, toTelHref } from "./lib/sheet";
+import {
+  parseSheetText,
+  fetchSheetText,
+  fetchLiveTeamSheet,
+  getTeamSheetUrl,
+  isTeamMode,
+  toTelHref,
+} from "./lib/sheet";
 import { exportResultsCsv, computeAnalytics } from "./lib/export";
+import {
+  isUnlocked,
+  checkPasscodeRequired,
+  getCallerName,
+  setCallerName,
+  clearUnlock,
+} from "./lib/auth";
+import { writeStatusToSheet } from "./lib/sheetWrite";
+import PasscodeGate from "./components/PasscodeGate";
 
 const EMPTY_MAPPING = { name: "", phone: "", business: "", notes: "", status: "" };
 const EMPTY_FILTERS = { skipAlreadyCalled: true, onlyEmptyStatus: false };
@@ -118,17 +135,25 @@ function isAlreadyCalled(statusValue) {
   return CALLED_MARKERS.some((m) => lower.includes(m));
 }
 
+function shouldSkipByStatus(statusValue, team) {
+  const value = String(statusValue || "").trim();
+  if (!value) return false;
+  if (team) return true;
+  return isAlreadyCalled(value);
+}
+
 export default function CallQueue() {
-  const [stage, setStage] = useState("connect");
-  const [inputMode, setInputMode] = useState("paste");
-  const [sheetUrl, setSheetUrl] = useState("");
+  const teamMode = isTeamMode();
+  const [stage, setStage] = useState(teamMode ? "locked" : "connect");
+  const [inputMode, setInputMode] = useState(teamMode ? "url" : "paste");
+  const [sheetUrl, setSheetUrl] = useState(getTeamSheetUrl());
   const [pastedCsv, setPastedCsv] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [headers, setHeaders] = useState([]);
   const [rows, setRows] = useState([]);
   const [mapping, setMapping] = useState(EMPTY_MAPPING);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filters, setFilters] = useState({ ...EMPTY_FILTERS, skipAlreadyCalled: teamMode });
   const [filterPreview, setFilterPreview] = useState(null);
 
   const [queue, setQueue] = useState([]);
@@ -139,6 +164,13 @@ export default function CallQueue() {
   const [callbackAt, setCallbackAt] = useState("");
   const [pendingOutcome, setPendingOutcome] = useState(null);
   const [showInstall, setShowInstall] = useState(true);
+  const [showFallback, setShowFallback] = useState(false);
+  const [syncStatus, setSyncStatus] = useState("");
+
+  const [authChecked, setAuthChecked] = useState(!teamMode);
+  const [passcodeRequired, setPasscodeRequired] = useState(false);
+  const [callerName, setCallerNameState] = useState(getCallerName());
+  const [callerInput, setCallerInput] = useState(getCallerName());
 
   const [savedSession, setSavedSession] = useState(null);
   const [hydrated, setHydrated] = useState(false);
@@ -167,11 +199,44 @@ export default function CallQueue() {
 
   useEffect(() => {
     const session = loadSession();
-    if (session?.stage && session.stage !== "connect") {
+    if (session?.stage && session.stage !== "connect" && session.stage !== "locked" && session.stage !== "caller") {
       setSavedSession(session);
     }
     setHydrated(true);
   }, []);
+
+  useEffect(() => {
+    if (!teamMode) {
+      setAuthChecked(true);
+      return;
+    }
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const required = await checkPasscodeRequired();
+        if (cancelled) return;
+        setPasscodeRequired(required);
+        if (!required || isUnlocked()) {
+          if (!getCallerName()) setStage("caller");
+          else {
+            setCallerNameState(getCallerName());
+            setStage("connect");
+          }
+        } else {
+          setStage("locked");
+        }
+      } catch {
+        if (!cancelled) setError("Could not verify team access.");
+      } finally {
+        if (!cancelled) setAuthChecked(true);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [teamMode]);
 
   const persist = useCallback(
     (overrides = {}) => {
@@ -189,10 +254,11 @@ export default function CallQueue() {
         index,
         log,
         callbacks,
+        callerName,
         ...overrides,
       });
     },
-    [hydrated, stage, inputMode, sheetUrl, pastedCsv, headers, rows, mapping, filters, queue, index, log, callbacks]
+    [hydrated, stage, inputMode, sheetUrl, pastedCsv, headers, rows, mapping, filters, queue, index, log, callbacks, callerName]
   );
 
   useEffect(() => {
@@ -212,13 +278,35 @@ export default function CallQueue() {
     setIndex(session.index || 0);
     setLog(session.log || []);
     setCallbacks(session.callbacks || []);
+    setCallerNameState(session.callerName || getCallerName());
     setSavedSession(null);
     setError("");
   }
 
+  function handleUnlock() {
+    if (!getCallerName()) {
+      setStage("caller");
+      return;
+    }
+    setCallerNameState(getCallerName());
+    setStage("connect");
+  }
+
+  function handleCallerSubmit() {
+    const name = setCallerName(callerInput);
+    if (!name) {
+      setError("Enter your name so the team knows who called each lead.");
+      return;
+    }
+    setCallerNameState(name);
+    setError("");
+    setStage("connect");
+  }
+
   function resetAll() {
     clearSession();
-    setStage("connect");
+    if (teamMode && passcodeRequired) clearUnlock();
+    setStage(teamMode && passcodeRequired && !isUnlocked() ? "locked" : teamMode && !getCallerName() ? "caller" : "connect");
     setInputMode("paste");
     setSheetUrl("");
     setPastedCsv("");
@@ -236,15 +324,47 @@ export default function CallQueue() {
     setCallbackAt("");
     setPendingOutcome(null);
     setSavedSession(null);
+    setSyncStatus("");
+    setShowFallback(false);
   }
 
-  function parseAndProceed(text) {
-    const parsed = parseSheetText(text);
+  function applyParsedSheet(parsed, { autoStart = false } = {}) {
     setHeaders(parsed.headers);
     setRows(parsed.rows);
     setMapping(parsed.mapping);
     setFilterPreview(null);
+
+    if (autoStart && parsed.mapping.phone) {
+      const built = buildMappedLeadsFrom(parsed.rows, parsed.mapping).filter((r) => {
+        if (!r.phone || !String(r.phone).trim()) return false;
+        if (parsed.mapping.status && filters.skipAlreadyCalled && shouldSkipByStatus(r.status, teamMode)) return false;
+        if (parsed.mapping.status && filters.onlyEmptyStatus && String(r.status || "").trim()) return false;
+        return true;
+      });
+
+      if (!built.length) {
+        setError("No uncalled leads left in the team sheet.");
+        setStage("connect");
+        return;
+      }
+
+      setQueue(built);
+      setIndex(0);
+      setLog([]);
+      setCallNote("");
+      setCallbackAt("");
+      setPendingOutcome(null);
+      setStage("queue");
+      setError("");
+      return;
+    }
+
     setStage("map");
+  }
+
+  function parseAndProceed(text, options) {
+    const parsed = parseSheetText(text);
+    applyParsedSheet(parsed, options);
   }
 
   function handleLoadPaste() {
@@ -260,6 +380,48 @@ export default function CallQueue() {
     }
   }
 
+  async function handleLoadTeamSheet() {
+    setError("");
+    setLoading(true);
+    try {
+      const { text } = await fetchLiveTeamSheet();
+      parseAndProceed(text, { autoStart: true });
+    } catch (e) {
+      setError(`${e.message} Use manual fallback if needed.`);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRefreshTeamSheet() {
+    if (!teamMode) return;
+    setSyncStatus("Refreshing…");
+    setLoading(true);
+    try {
+      const { text } = await fetchLiveTeamSheet();
+      const parsed = parseSheetText(text);
+      setHeaders(parsed.headers);
+      setRows(parsed.rows);
+      setMapping(parsed.mapping);
+
+      const fresh = buildMappedLeadsFrom(parsed.rows, parsed.mapping).filter((r) => {
+        if (!r.phone || !String(r.phone).trim()) return false;
+        if (parsed.mapping.status && shouldSkipByStatus(r.status, true)) return false;
+        return true;
+      });
+
+      const processedRows = new Set(log.map((l) => l.sheetRow).filter(Boolean));
+      const remaining = fresh.filter((lead) => !processedRows.has(lead.sheetRow));
+      setQueue(remaining);
+      setIndex(0);
+      setSyncStatus(remaining.length ? `${remaining.length} leads ready` : "No uncalled leads left");
+    } catch (e) {
+      setSyncStatus("");
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
   async function handleLoadUrl() {
     setError("");
     if (!sheetUrl.trim()) {
@@ -280,15 +442,20 @@ export default function CallQueue() {
     }
   }
 
-  function buildMappedLeads() {
-    return rows.map((r) => ({
-      name: mapping.name ? r[mapping.name] : "",
-      phone: mapping.phone ? r[mapping.phone] : "",
-      business: mapping.business ? r[mapping.business] : "",
-      notes: mapping.notes ? r[mapping.notes] : "",
-      status: mapping.status ? r[mapping.status] : "",
-      rowId: `${r[mapping.phone] || ""}-${r[mapping.name] || ""}-${rows.indexOf(r)}`,
+  function buildMappedLeadsFrom(sourceRows, sourceMapping) {
+    return sourceRows.map((r) => ({
+      name: sourceMapping.name ? r[sourceMapping.name] : "",
+      phone: sourceMapping.phone ? r[sourceMapping.phone] : "",
+      business: sourceMapping.business ? r[sourceMapping.business] : "",
+      notes: sourceMapping.notes ? r[sourceMapping.notes] : "",
+      status: sourceMapping.status ? r[sourceMapping.status] : "",
+      sheetRow: r._sheetRow,
+      rowId: `${r[sourceMapping.phone] || ""}-${r[sourceMapping.name] || ""}-${r._sheetRow}`,
     }));
+  }
+
+  function buildMappedLeads() {
+    return buildMappedLeadsFrom(rows, mapping);
   }
 
   function previewFilters() {
@@ -297,7 +464,7 @@ export default function CallQueue() {
     let filtered = withPhone;
 
     if (filters.skipAlreadyCalled && mapping.status) {
-      filtered = filtered.filter((r) => !isAlreadyCalled(r.status));
+      filtered = filtered.filter((r) => !shouldSkipByStatus(r.status, teamMode));
     }
     if (filters.onlyEmptyStatus && mapping.status) {
       filtered = filtered.filter((r) => !String(r.status || "").trim());
@@ -328,7 +495,7 @@ export default function CallQueue() {
     setError("");
   }
 
-  function advance(result, extra = {}) {
+  async function advance(result, extra = {}) {
     if (!current) return;
 
     const outcome = OUTCOME_BY_ID[result];
@@ -338,16 +505,35 @@ export default function CallQueue() {
       return;
     }
 
+    const note = callNote.trim();
     const entry = {
       name: current.name,
       phone: current.phone,
       business: current.business,
       sheetNotes: current.notes,
+      sheetRow: current.sheetRow,
       result,
-      callNote: callNote.trim(),
+      callNote: note,
       callbackAt: extra.callbackAt || callbackAt || "",
       recordedAt: new Date().toISOString(),
     };
+
+    if (teamMode && current.sheetRow) {
+      setSyncStatus("Saving to sheet…");
+      try {
+        await writeStatusToSheet({
+          row: current.sheetRow,
+          result,
+          calledBy: callerName,
+          note,
+        });
+        setSyncStatus("Saved to team sheet");
+      } catch (e) {
+        setError(`Couldn't update the sheet: ${e.message}`);
+        setSyncStatus("");
+        return;
+      }
+    }
 
     const nextLog = [...log, entry];
     setLog(nextLog);
@@ -418,7 +604,49 @@ export default function CallQueue() {
     >
       <style>{`.digit-label { letter-spacing: 0.14em; }`}</style>
 
-      {stage === "connect" && (
+      {!authChecked && (
+        <div className="w-full max-w-sm text-center">
+          <p className="text-sm" style={{ color: theme.textMuted }}>
+            Checking access…
+          </p>
+        </div>
+      )}
+
+      {authChecked && stage === "locked" && <PasscodeGate onUnlock={handleUnlock} />}
+
+      {authChecked && stage === "caller" && (
+        <div className="w-full max-w-sm">
+          <div className="mb-8 text-center">
+            <div
+              className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
+              style={{ background: theme.accent }}
+            >
+              <User size={20} color="#fff" />
+            </div>
+            <h1 className="text-2xl font-semibold mb-1">Who&apos;s calling?</h1>
+            <p className="text-sm" style={{ color: theme.textMuted }}>
+              Your name is saved on this device and written to the sheet as Called By.
+            </p>
+          </div>
+          <input
+            value={callerInput}
+            onChange={(e) => setCallerInput(e.target.value)}
+            placeholder="Your name"
+            className="w-full rounded-xl px-4 py-3 mb-3 text-sm border outline-none"
+            style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}
+          />
+          {error && <p className="text-xs mb-3" style={{ color: theme.danger }}>{error}</p>}
+          <button
+            onClick={handleCallerSubmit}
+            className="w-full rounded-xl py-3 font-medium"
+            style={{ background: theme.accent, color: "#fff" }}
+          >
+            Continue
+          </button>
+        </div>
+      )}
+
+      {authChecked && stage === "connect" && (
         <div className="w-full max-w-sm">
           {showInstall && <InstallBanner onDismiss={() => setShowInstall(false)} />}
 
@@ -431,8 +659,15 @@ export default function CallQueue() {
             </div>
             <h1 className="text-2xl font-semibold mb-1">Call Queue</h1>
             <p className="text-sm" style={{ color: theme.textMuted }}>
-              Load your sheet. One lead at a time — track outcomes, notes, and callbacks.
+              {teamMode
+                ? "Shared team queue — live sheet sync, no duplicate calls."
+                : "Load your sheet. One lead at a time — track outcomes, notes, and callbacks."}
             </p>
+            {teamMode && callerName && (
+              <p className="text-xs mt-2" style={{ color: theme.textDim }}>
+                Calling as {callerName}
+              </p>
+            )}
           </div>
 
           {savedSession && (
@@ -469,6 +704,90 @@ export default function CallQueue() {
             </div>
           )}
 
+          {teamMode ? (
+            <>
+              <button
+                onClick={handleLoadTeamSheet}
+                disabled={loading}
+                className={`${btnPrimary} disabled:opacity-50 mb-3`}
+                style={btnPrimaryStyle}
+              >
+                {loading ? "Loading team sheet…" : "Load team sheet"}
+              </button>
+              <p className="text-xs mb-4 leading-relaxed text-center" style={{ color: theme.textDim }}>
+                Pulls live leads from your shared sheet and skips rows already marked with a status.
+              </p>
+              {!showFallback ? (
+                <button
+                  onClick={() => setShowFallback(true)}
+                  className="w-full text-xs py-2"
+                  style={{ color: theme.textMuted }}
+                >
+                  Manual fallback (paste / custom URL)
+                </button>
+              ) : (
+                <div className="mt-4 pt-4 border-t" style={{ borderColor: theme.border }}>
+                  <div
+                    className="flex gap-1 rounded-lg p-1 mb-4 border"
+                    style={{ background: theme.surface, borderColor: theme.border }}
+                  >
+                    {["paste", "url"].map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setInputMode(mode)}
+                        className="flex-1 text-xs font-medium rounded-md py-2 transition-colors"
+                        style={
+                          inputMode === mode
+                            ? { background: theme.accent, color: "#fff" }
+                            : { color: theme.textMuted }
+                        }
+                      >
+                        {mode === "paste" ? "Paste data" : "Sheet link"}
+                      </button>
+                    ))}
+                  </div>
+                  {inputMode === "paste" ? (
+                    <>
+                      <textarea
+                        className="w-full h-28 rounded-xl px-3 py-3 mb-2 text-xs font-mono outline-none resize-none border"
+                        style={{
+                          background: theme.surface,
+                          borderColor: theme.border,
+                          color: theme.text,
+                        }}
+                        placeholder="Paste CSV fallback…"
+                        value={pastedCsv}
+                        onChange={(e) => setPastedCsv(e.target.value)}
+                      />
+                      <button onClick={handleLoadPaste} className={btnPrimary} style={btnPrimaryStyle}>
+                        Load pasted data
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        className="w-full rounded-xl px-3 py-3 mb-2 text-sm border outline-none"
+                        style={{ background: theme.surface, borderColor: theme.border, color: theme.text }}
+                        placeholder="Custom sheet URL"
+                        value={sheetUrl}
+                        onChange={(e) => setSheetUrl(e.target.value)}
+                      />
+                      <button
+                        onClick={handleLoadUrl}
+                        disabled={loading}
+                        className={`${btnPrimary} disabled:opacity-50`}
+                        style={btnPrimaryStyle}
+                      >
+                        Load custom sheet
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              {error && <p className="text-xs mt-4" style={{ color: theme.danger }}>{error}</p>}
+            </>
+          ) : (
+            <>
           <div
             className="flex gap-1 rounded-lg p-1 mb-4 border"
             style={{ background: theme.surface, borderColor: theme.border }}
@@ -551,6 +870,8 @@ export default function CallQueue() {
               >
                 {loading ? "Connecting…" : "Load sheet"}
               </button>
+            </>
+          )}
             </>
           )}
         </div>
@@ -668,6 +989,17 @@ export default function CallQueue() {
           <div className="w-full flex items-center justify-between mb-4 px-1">
             <Odometer value={index + 1} total={queue.length} />
             <div className="flex items-center gap-3">
+              {teamMode && (
+                <button
+                  onClick={handleRefreshTeamSheet}
+                  disabled={loading}
+                  className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border disabled:opacity-50"
+                  style={{ borderColor: theme.border, color: theme.textMuted }}
+                  title="Refresh from team sheet"
+                >
+                  <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+                </button>
+              )}
               {(dueCallbacks.length > 0 || callbacks.length > 0) && (
                 <button
                   onClick={() => setStage("callbacks")}
@@ -690,6 +1022,12 @@ export default function CallQueue() {
               </span>
             </div>
           </div>
+
+          {syncStatus && (
+            <p className="w-full text-xs mb-3 px-1" style={{ color: theme.info }}>
+              {syncStatus}
+            </p>
+          )}
 
           <div
             className="relative w-full h-64 mb-4 select-none"
@@ -837,7 +1175,8 @@ export default function CallQueue() {
           </button>
 
           <p className="text-[11px] mt-4 text-center leading-relaxed" style={{ color: theme.textDim }}>
-            Swipe right = interested · Swipe left = skip · Progress saves automatically
+            Swipe right = interested · Swipe left = skip ·{" "}
+            {teamMode ? "Outcomes sync to the team sheet" : "Progress saves automatically"}
           </p>
         </div>
       )}

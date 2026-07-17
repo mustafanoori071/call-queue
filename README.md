@@ -1,21 +1,57 @@
 # Call Queue
 
-Swipeable cold-call queue for local service outreach. Load leads from Google Sheets, dial one at a time, log outcomes, take notes, schedule callbacks, and export results.
+Swipeable cold-call queue for team outreach. Load leads from a shared Google Sheet, dial one at a time, log outcomes, and write status back so nobody calls the same lead twice.
 
 ## Features
 
-- **Paste or live sheet link** — CSV paste (always works) or Google Sheet URL fetch
-- **Column mapping** — auto-detects name, phone, business, status, notes
-- **Queue filters** — skip already-called rows, only empty status
+- **Team passcode gate** — shared code checked server-side (not in the frontend)
+- **Live Google Sheet read** — fetches uncalled leads from `VITE_SHEET_URL`
+- **Sheet write-back** — posts outcomes to Google Apps Script on each action
+- **Caller name** — saved per device, written to `Called By` column
 - **Rich outcomes** — interested, no answer, voicemail, not interested, callback, bad number, skip
-- **Call notes** — jot context after each dial
-- **Callbacks** — schedule date/time, view due and upcoming reminders
-- **Auto-save** — progress persists in `localStorage`; resume where you left off
-- **Session analytics** — contact rate, interest rate, outcome breakdown
-- **CSV export** — download full results with notes and timestamps
-- **PWA** — install via Add to Home Screen (iOS/Android)
+- **Callbacks, notes, analytics, CSV export**
+- **PWA** — Add to Home Screen on iOS/Android
+- **Manual fallback** — paste CSV or custom URL if live sync fails
 
-## Quick start
+## Team setup (one time)
+
+### 1. Google Sheet columns
+
+| Column | Purpose |
+|---|---|
+| Name | Contact name |
+| Phone | Required |
+| Business | Optional |
+| Status | Written by the app (`interested`, `no answer`, `skipped`, etc.) |
+| Called By | Team member name |
+| Notes | Optional — call notes appended here |
+
+Set sharing to **Anyone with the link — Viewer**.
+
+### 2. Apps Script write-back
+
+1. Open the sheet → **Extensions → Apps Script**
+2. Paste `google-apps-script/Code.gs` from this repo
+3. **Deploy → New deployment → Web app**
+   - Execute as: **Me**
+   - Who has access: **Anyone**
+4. Copy the deployment URL
+
+### 3. Vercel environment variables
+
+In your Vercel project → Settings → Environment Variables:
+
+| Variable | Example |
+|---|---|
+| `TEAM_PASSCODE` | `PULSE` |
+| `SHEET_WRITE_URL` | `https://script.google.com/macros/s/.../exec` |
+| `VITE_SHEET_URL` | `https://docs.google.com/spreadsheets/d/.../edit` |
+
+Redeploy after adding variables.
+
+### 4. Local dev
+
+Copy `.env.example` to `.env.local` and fill in the same values.
 
 ```bash
 npm install
@@ -24,8 +60,11 @@ npm run dev
 
 ## Deploy
 
-Push to GitHub and connect at [vercel.com](https://vercel.com). Build command: `npm run build`, output: `dist`.
+Push to GitHub → connect at [vercel.com](https://vercel.com).
 
-## Theme
+- Build: `npm run build`
+- Output: `dist`
 
-Blue accent on dark navy (`#3B82F6` on `#0B1220`).
+## Solo mode
+
+If `VITE_SHEET_URL` is not set, the app runs in solo mode with paste/URL loading and local persistence only — no passcode or sheet write-back.

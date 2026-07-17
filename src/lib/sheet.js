@@ -52,7 +52,25 @@ export function parseSheetText(text) {
   const parsed = Papa.parse(text.trim(), { header: true, skipEmptyLines: true });
   if (!parsed.data.length) throw new Error("No rows found in that data.");
   const headers = parsed.meta.fields || [];
-  return { headers, rows: parsed.data, mapping: defaultMapping(headers) };
+  const rows = parsed.data.map((row, i) => ({
+    ...row,
+    _sheetRow: i + 2,
+  }));
+  return { headers, rows, mapping: defaultMapping(headers) };
+}
+
+export function getTeamSheetUrl() {
+  return (import.meta.env.VITE_SHEET_URL || "").trim();
+}
+
+export function isTeamMode() {
+  return Boolean(getTeamSheetUrl());
+}
+
+export async function fetchLiveTeamSheet() {
+  const sheetUrl = getTeamSheetUrl();
+  if (!sheetUrl) throw new Error("VITE_SHEET_URL is not configured.");
+  return fetchSheetText(sheetUrl);
 }
 
 export async function fetchSheetText(sheetUrl) {
