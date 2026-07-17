@@ -24,24 +24,22 @@ export const CALLED_MARKERS = [
   "done",
   "completed",
   "contacted",
-  "interested",
-  "not interested",
+  "booked/website!",
+  "booked/ no show",
+  "closed",
   "no answer",
-  "voicemail",
-  "callback",
-  "bad number",
-  "skipped",
   "yes",
 ];
 
+// Must match allowed values in the Google Sheet status dropdown
 const SHEET_STATUS = {
-  interested: "interested",
+  interested: "booked/Website!",
   no_answer: "no answer",
-  voicemail: "voicemail",
-  not_interested: "not interested",
-  callback: "callback",
-  bad_number: "bad number",
-  skipped: "skipped",
+  voicemail: "no answer",
+  not_interested: "Closed",
+  callback: "no answer",
+  bad_number: "Closed",
+  skipped: "no answer",
 };
 
 export function outcomeToSheetStatus(result) {

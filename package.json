@@ -10,7 +10,7 @@
     "setup:team": "node scripts/setup-team.mjs",
     "clasp:login": "clasp login",
     "clasp:push": "clasp push --force --rootDir google-apps-script",
-    "clasp:deploy": "clasp deploy --description \"Call Queue write API\" --rootDir google-apps-script",
+    "clasp:deploy": "clasp deploy -i AKfycbwOTcpmorOWk0xNzxOSNWwnA14ajedAtNm3-LuX7pvn0Rx-9iUcl7Fj8U_yBLEsH_P3 --description \"Call Queue write API\" --rootDir google-apps-script",
     "vercel:login": "vercel login",
     "vercel:env": "vercel env ls",
     "vercel:deploy": "vercel --prod --yes"
