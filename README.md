@@ -71,4 +71,4 @@ If `VITE_SHEET_URL` is not set, the app runs in solo mode with paste/URL loading
 
 ## Billing note (Places API)
 
-Call Queue does **not** call Google Places / Maps APIs. If you see Places Details, Contact Data, or Atmosphere Data charges on GCP project `intelligence-ai-outbound`, see [docs/PLACES_BILLING.md](docs/PLACES_BILLING.md) for what caused them and how to find, reduce, and cap the spend.
+Call Queue does **not** call Google Places / Maps APIs. Charges on GCP project `intelligence-ai-outbound` came from the **scraper** using Places API keys. To turn Places off completely (disable APIs, revoke keys, remove scraper calls), see [docs/PLACES_BILLING.md](docs/PLACES_BILLING.md).

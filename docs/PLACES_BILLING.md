@@ -1,159 +1,78 @@
-# Why you were charged $111.87 (Places API)
+# Stop Places API charges ($111.87)
 
-## Short answer
+## What happened
 
-Your **scraper** in GCP project **intelligence-ai-outbound** called the **Google Places (Place Details)** API with your API keys between **July 1–18, 2026**. It requested fields that bill under three SKUs:
+Your **scraper** in GCP project **intelligence-ai-outbound** used **Google Places API keys**. Place Details calls billed:
 
-| SKU | Amount | What the scraper likely asked for |
-|---|---|---|
-| Places Details | $46.39 | Base Place Details lookup per business |
-| Atmosphere Data | $40.92 | Rating, reviews, amenities, price level, editorial summary, etc. |
-| Contact Data | $24.56 | Phone number, website, opening hours |
+| SKU | Amount |
+|---|---|
+| Places Details | $46.39 |
+| Atmosphere Data | $40.92 |
+| Contact Data | $24.56 |
+| **Total** | **$111.87** |
 
-Total: **$111.87**. Same as the prior period (June 13–30), so the scraper (or a schedule that runs it) has been using Places repeatedly — not a one-off glitch.
+Places is **not free** after a small monthly allowance. Goal below: **use Places API keys = $0 forever**.
 
-All three line items are tagged to project **intelligence-ai-outbound**, region **us-west1**.
-
-## Why it wasn’t free
-
-Google Places is **not unlimited free**. People often remember the old **$200/month Maps credit**; that credit was **removed on March 1, 2025**.
-
-What you get now:
-
-- A small **free monthly allowance per SKU** (roughly: Essentials ~10k calls, Pro ~5k, Enterprise ~1k — exact caps depend on the SKU)
-- After that, **pay-as-you-go**
-- Free caps are **not pooled** — Contact and Atmosphere each burn their own allowance
-- Scrapers that pull phone + website + ratings for many businesses blow past free tiers quickly
-
-Your bill’s SKU names (**Places Details**, **Contact Data**, **Atmosphere Data**) match Place Details calls that request **contact** and **atmosphere** fields. Those are the expensive add-ons. A scraper that only needed name/address would cost far less (or stay in free tier longer).
-
-So: the API keys worked; Google just started (or continued) charging once usage exceeded free thresholds for those SKUs.
-
-## How Places billing works (why three SKUs)
-
-Place Details pricing is driven by the **field mask** (or `fields=`) on each request. Asking for contact or atmosphere fields adds those SKUs on top of the base Details charge. Common scraper patterns that create this exact bill:
-
-- Requesting “everything” / omitting a tight field mask
-- Enriching every lead with phone + website + rating/reviews
-- Re-fetching the same place IDs without caching
-- Running the scraper over a large sheet/list more than once
-
-## This repo is not the source
-
-Call Queue only:
-
-- Reads leads from a Google Sheet
-- Writes status/notes via Apps Script
-- Opens a normal Google web search on “Look up” (no Places API key)
-
-There is **no** Places API client, Maps key, or `intelligence-ai-outbound` reference in this codebase. The charge comes from your **scraper / enrichment** tooling that uses Places API keys under that GCP project — Call Queue only consumes the sheet afterward.
-
-```text
-Your scraper (intelligence-ai-outbound + Places API keys)
-  → Google Places Place Details API  (Details + Contact + Atmosphere)
-  → Lead Google Sheet
-  → Call Queue app (consumer only)
-```
+Call Queue does **not** call Places. Only the scraper does. Turn Places off in GCP and remove keys from the scraper.
 
 ---
 
-## 1. Identify the service / key making Place Details requests
+## Do this now (kill Places billing)
 
-Use Google Cloud Console for project **intelligence-ai-outbound**:
+Work in Google Cloud Console → project **intelligence-ai-outbound**.
 
-1. **Billing → Reports** — filter SKUs containing “Places”; confirm amounts match the table above.
-2. **APIs & Services → Enabled APIs** — open **Places API** (or Places API New) → **Metrics**.
-3. **APIs & Services → Credentials** — note which API keys / service accounts show Places traffic.
-4. **Logging → Logs Explorer** — query for Place Details callers, for example:
+### 1. Disable the Places APIs
 
-```text
-resource.type=("cloud_run_revision" OR "cloud_function" OR "gce_instance" OR "k8s_container")
-("places.googleapis.com" OR "maps.googleapis.com" OR "placeDetails" OR "X-Goog-FieldMask")
-```
+1. **APIs & Services → Enabled APIs & services**
+2. Disable every Places-related API you see, including:
+   - Places API
+   - Places API (New)
+   - Maps JavaScript API (only if you don’t need maps elsewhere)
+   - Any other Maps/Places APIs you don’t need
 
-5. **Cloud Run / Cloud Functions / Compute Engine / Cloud Scheduler** in **us-west1** — look for jobs that enrich business leads (phone, website, rating, reviews).
+After disable, Place Details requests fail instead of billing.
 
-Record: credential name, service name, schedule (if any), and whether requests use a field mask.
+### 2. Delete or lock the API keys
 
----
+1. **APIs & Services → Credentials**
+2. For each key the scraper used:
+   - **Delete** the key, **or**
+   - Edit → **API restrictions** → do **not** allow Places / Maps APIs (or set “Don’t allow any APIs” temporarily)
+3. Rotate any key that was committed to git, `.env`, or a public config
 
-## 2. Tighten the field mask (cut Atmosphere / Contact when unused)
+### 3. Stop the scraper from calling Places
 
-Every Place Details request should send an explicit `X-Goog-FieldMask` (or `fields=`) with **only** columns you store.
+In the scraper repo / job (not this call-queue repo):
 
-| Need | Safer fields (examples) | Avoid unless required |
-|---|---|---|
-| Name + address for dialing | `id`, `displayName`, `formattedAddress`, `location` | Atmosphere (rating, reviews, amenities) |
-| Phone for outbound | `nationalPhoneNumber` or `internationalPhoneNumber` | Full Contact bundle if unused |
-| Website | `websiteUri` | Reviews, editorial summaries |
-| Lead scoring by rating | `rating`, `userRatingCount` | Pulling reviews / photos / amenity dumps |
+1. Remove env vars like `GOOGLE_MAPS_API_KEY`, `PLACES_API_KEY`, `MAPS_API_KEY`, etc.
+2. Delete code paths that call:
+   - `places.googleapis.com`
+   - `maps.googleapis.com`
+   - Place Details / Text Search / Nearby Search / Find Place
+3. Pause Cloud Scheduler / cron / Cloud Run jobs that run enrichment until Places is gone from the code
 
-Rules of thumb:
+Without keys + with APIs disabled, even an old scraper binary cannot bill you.
 
-- If you only need phone + name, **do not** request Atmosphere fields — that alone can remove the ~$40 Atmosphere line.
-- Never omit the field mask; an empty/missing mask can bill the highest applicable SKUs.
-- Prefer Place Details Essentials/Pro fields over Enterprise + Atmosphere when possible.
+### 4. Optional safety net
 
-After changing masks, re-check Billing → Reports for Contact / Atmosphere SKUs over the next billing window.
-
----
-
-## 3. Cache place IDs and stop re-enriching existing rows
-
-Places charges scale with **request count**. Prevent repeat lookups:
-
-1. Store `place_id` (and enriched fields) on the sheet/DB row the first time you enrich.
-2. Skip enrichment when `place_id` or phone already exists.
-3. Deduplicate by place ID / normalized business name + city before calling Places.
-4. Cap batch jobs (e.g. max N Place Details calls per run) and log skipped vs fetched counts.
-5. Do not re-run full-sheet enrichment on a schedule unless new rows were added.
-
-Pseudo-policy for enrichment jobs:
-
-```text
-for each lead:
-  if place_id or phone already present → skip
-  else → Place Details with minimal field mask → write fields + place_id
-```
+1. **Billing → Budgets & alerts** on `intelligence-ai-outbound` — e.g. alert at $5 and $10
+2. **Places API → Quotas** → set daily quota to **0** if the API must stay listed but unused
 
 ---
 
-## 4. Budget alerts and API key restrictions
+## Verify spend is dead
 
-### Billing budget (prevent surprise bills)
-
-1. Google Cloud Console → **Billing → Budgets & alerts**
-2. Create a budget scoped to project **intelligence-ai-outbound**
-3. Suggested thresholds: 50%, 90%, 100% of a monthly cap you choose (e.g. $25–$50 if enrichment should be light)
-4. Add email (and Pub/Sub if you want automated disable later)
-
-### Quotas
-
-1. **APIs & Services → Places API → Quotas**
-2. Lower the daily Place Details quota to a level that matches expected new leads (not “unlimited”)
-
-### API key hardening
-
-1. **APIs & Services → Credentials** → open the key used for Places
-2. Restrict **API restrictions** to Places API only (remove unused APIs)
-3. Add **Application restrictions** (HTTP referrers for browsers, or IP / none for server keys — prefer server-side keys never embedded in clients)
-4. Rotate any key that may have leaked into a frontend or public repo
-
-### Emergency stop
-
-If spend is still climbing:
-
-1. Disable the Places API on the project, **or**
-2. Delete / restrict the active API key, **or**
-3. Pause the Cloud Scheduler / job that runs enrichment
+1. Run the scraper once after the changes — it should **error** on Places (or skip enrichment), not succeed
+2. **Billing → Reports** next day: Places Details / Contact / Atmosphere should be **$0**
+3. **APIs & Services → Places → Metrics**: request count should be **0**
 
 ---
 
-## Checklist summary
+## Checklist
 
-- [ ] Confirm Places traffic in `intelligence-ai-outbound` (Reports + Metrics + Logs)
-- [ ] Identify credential + service in `us-west1`
-- [ ] Set minimal field mask; drop Atmosphere if unused
-- [ ] Cache `place_id`; skip rows that already have phone/details
-- [ ] Add billing budget alerts
-- [ ] Cap Places quotas; restrict API keys
+- [ ] Disable Places API (+ Places API New) on `intelligence-ai-outbound`
+- [ ] Delete or restrict scraper API keys (no Places allowed)
+- [ ] Remove Places keys/calls from the scraper code and redeploy
+- [ ] Pause any scheduled enrichment jobs until confirmed clean
+- [ ] Add a low billing budget alert ($5–$10)
+- [ ] Confirm Billing Reports show $0 Places after the next scraper run
