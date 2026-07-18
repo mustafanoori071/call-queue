@@ -2,25 +2,41 @@
 
 ## Short answer
 
-Something in GCP project **intelligence-ai-outbound** called the **Google Places (Place Details)** API between **July 1–18, 2026**, and requested fields that bill under three SKUs:
+Your **scraper** in GCP project **intelligence-ai-outbound** called the **Google Places (Place Details)** API with your API keys between **July 1–18, 2026**. It requested fields that bill under three SKUs:
 
-| SKU | Amount | What it usually means |
+| SKU | Amount | What the scraper likely asked for |
 |---|---|---|
-| Places Details | $46.39 | Base Place Details lookup |
-| Atmosphere Data | $40.92 | Fields like rating, reviews, editorial summary, amenities, price level |
-| Contact Data | $24.56 | Fields like phone number, website, opening hours |
+| Places Details | $46.39 | Base Place Details lookup per business |
+| Atmosphere Data | $40.92 | Rating, reviews, amenities, price level, editorial summary, etc. |
+| Contact Data | $24.56 | Phone number, website, opening hours |
 
-Total: **$111.87**. Same as the prior period (June 13–30), so this usage looks ongoing, not a one-off spike.
+Total: **$111.87**. Same as the prior period (June 13–30), so the scraper (or a schedule that runs it) has been using Places repeatedly — not a one-off glitch.
 
 All three line items are tagged to project **intelligence-ai-outbound**, region **us-west1**.
 
+## Why it wasn’t free
+
+Google Places is **not unlimited free**. People often remember the old **$200/month Maps credit**; that credit was **removed on March 1, 2025**.
+
+What you get now:
+
+- A small **free monthly allowance per SKU** (roughly: Essentials ~10k calls, Pro ~5k, Enterprise ~1k — exact caps depend on the SKU)
+- After that, **pay-as-you-go**
+- Free caps are **not pooled** — Contact and Atmosphere each burn their own allowance
+- Scrapers that pull phone + website + ratings for many businesses blow past free tiers quickly
+
+Your bill’s SKU names (**Places Details**, **Contact Data**, **Atmosphere Data**) match Place Details calls that request **contact** and **atmosphere** fields. Those are the expensive add-ons. A scraper that only needed name/address would cost far less (or stay in free tier longer).
+
+So: the API keys worked; Google just started (or continued) charging once usage exceeded free thresholds for those SKUs.
+
 ## How Places billing works (why three SKUs)
 
-Place Details pricing is driven by the **field mask** on each request. Asking for contact or atmosphere fields adds those SKUs on top of (or upgrades) the base Details charge. Common costly patterns:
+Place Details pricing is driven by the **field mask** (or `fields=`) on each request. Asking for contact or atmosphere fields adds those SKUs on top of the base Details charge. Common scraper patterns that create this exact bill:
 
 - Requesting “everything” / omitting a tight field mask
 - Enriching every lead with phone + website + rating/reviews
 - Re-fetching the same place IDs without caching
+- Running the scraper over a large sheet/list more than once
 
 ## This repo is not the source
 
@@ -30,10 +46,10 @@ Call Queue only:
 - Writes status/notes via Apps Script
 - Opens a normal Google web search on “Look up” (no Places API key)
 
-There is **no** Places API client, Maps key, or `intelligence-ai-outbound` reference in this codebase. The charge almost certainly comes from a separate lead-enrichment / outbound tooling service under that GCP project (script, another app, n8n/Make, Apps Script elsewhere, etc.).
+There is **no** Places API client, Maps key, or `intelligence-ai-outbound` reference in this codebase. The charge comes from your **scraper / enrichment** tooling that uses Places API keys under that GCP project — Call Queue only consumes the sheet afterward.
 
 ```text
-Enrichment service (intelligence-ai-outbound)
+Your scraper (intelligence-ai-outbound + Places API keys)
   → Google Places Place Details API  (Details + Contact + Atmosphere)
   → Lead Google Sheet
   → Call Queue app (consumer only)
