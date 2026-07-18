@@ -68,3 +68,7 @@ Push to GitHub → connect at [vercel.com](https://vercel.com).
 ## Solo mode
 
 If `VITE_SHEET_URL` is not set, the app runs in solo mode with paste/URL loading and local persistence only — no passcode or sheet write-back.
+
+## Billing note (Places API)
+
+Call Queue does **not** call Google Places / Maps APIs. Charges on GCP project `intelligence-ai-outbound` came from the **scraper** using Places API keys. To turn Places off completely (disable APIs, revoke keys, remove scraper calls), see [docs/PLACES_BILLING.md](docs/PLACES_BILLING.md).
